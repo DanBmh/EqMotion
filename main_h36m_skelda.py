@@ -11,62 +11,41 @@ import random
 import sys
 import tqdm
 
+# ==================================================================================================
+
 sys.path.append("/PoseForecasters/")
 import utils_pipeline
 
-# ==================================================================================================
-
-# datamode = "gt-gt"
-datamode = "pred-gt"
+datamode = "gt-gt"
 # datamode = "pred-pred"
 
 config_sk = {
-    # "item_step": 2,
-    # "window_step": 2,
-    "item_step": 1,
-    "window_step": 1,
+    "item_step": 2,
+    "window_step": 2,
+    # "item_step": 1,
+    # "window_step": 1,
     "select_joints": [
-        "hip_middle",
         "hip_right",
-        "knee_right",
-        "ankle_right",
         "hip_left",
+        "knee_right",
         "knee_left",
+        "ankle_right",
         "ankle_left",
         "nose",
-        "shoulder_left",
-        "elbow_left",
-        "wrist_left",
         "shoulder_right",
+        "shoulder_left",
         "elbow_right",
+        "elbow_left",
         "wrist_right",
-        "shoulder_middle",
+        "wrist_left",
     ],
 }
 
 datasets_train = [
-    "/datasets/preprocessed/human36m/train_forecast_kppspose_10fps.json",
-    # "/datasets/preprocessed/human36m/train_forecast_kppspose.json",
+    "/datasets/preprocessed/human36m/train_forecast_rpt.json",
 ]
 
-# datasets_train = [
-#     "/datasets/preprocessed/mocap/train_forecast_samples_10fps.json",
-#     "/datasets/preprocessed/amass/bmlmovi_train_forecast_samples_10fps.json",
-#     "/datasets/preprocessed/amass/bmlrub_train_forecast_samples_10fps.json",
-#     "/datasets/preprocessed/amass/kit_train_forecast_samples_10fps.json"
-# ]
-
-# datasets_train = [
-#     "/datasets/preprocessed/mocap/train_forecast_samples_4fps.json",
-#     "/datasets/preprocessed/amass/bmlmovi_train_forecast_samples_4fps.json",
-#     "/datasets/preprocessed/amass/bmlrub_train_forecast_samples_4fps.json",
-#     "/datasets/preprocessed/amass/kit_train_forecast_samples_4fps.json"
-# ]
-
-dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_kppspose.json"
-# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_10fps.json"
-# dataset_eval_test = "/datasets/preprocessed/mocap/{}_forecast_samples_4fps.json"
+dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_rpt.json"
 
 
 num_joints = len(config_sk["select_joints"])
@@ -441,6 +420,10 @@ def train(model, optimizer, epoch, data_loader, dim_used=[], backprop=True, dlen
                 sequences_train, sequences_gt
             )
 
+        # Convert to millimeters
+        sequences_train = sequences_train * 1000
+        sequences_gt = sequences_gt * 1000
+
         sequences_train = sequences_train.transpose([0, 2, 1, 3])
         sequences_gt = sequences_gt.transpose([0, 2, 1, 3])
         seq_train_vel = calc_delta(sequences_train)
@@ -500,6 +483,10 @@ def test(model, optimizer, epoch, data_loader, dim_used=[], backprop=False, dlen
         ):
             sequences_train = prepare_sequences(batch, nbatch, "input", args.scale)
             sequences_gt = prepare_sequences(batch, nbatch, "target", args.scale)
+
+            # Convert to millimeters
+            sequences_train = sequences_train * 1000
+            sequences_gt = sequences_gt * 1000
 
             sequences_train = sequences_train.transpose([0, 2, 1, 3])
             seq_train_vel = calc_delta(sequences_train)
