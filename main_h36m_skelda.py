@@ -43,10 +43,11 @@ config_sk = {
 
 datasets_train = [
     "/datasets/preprocessed/human36m/train_forecast_rpt.json",
+    # "/datasets/preprocessed/cmu-mocap/train.json"
 ]
 
 dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_rpt.json"
-
+# dataset_eval_test = "/datasets/preprocessed/cmu-mocap/{}.json"
 
 num_joints = len(config_sk["select_joints"])
 in_features = num_joints * 3
