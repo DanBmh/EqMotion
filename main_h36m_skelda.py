@@ -18,12 +18,15 @@ import utils_pipeline
 
 datamode = "gt-gt"
 # datamode = "pred-pred"
+# datamode = "pred-gt"
 
 config_sk = {
     "item_step": 2,
     "window_step": 2,
     # "item_step": 1,
     # "window_step": 1,
+    # "item_step": 4,
+    # "window_step": 4,
     "select_joints": [
         "hip_right",
         "hip_left",
@@ -43,7 +46,10 @@ config_sk = {
 
 datasets_train = [
     "/datasets/preprocessed/human36m/train_forecast_rpt.json",
-    # "/datasets/preprocessed/cmu-mocap/train.json"
+    # "/datasets/preprocessed/cmu-mocap/train.json",
+    # "/datasets/preprocessed/amass/bmlmovi.json",
+    # "/datasets/preprocessed/amass/bmlrub.json",
+    # "/datasets/preprocessed/amass/kit.json",
 ]
 
 dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_rpt.json"
@@ -62,6 +68,7 @@ def prepare_sequences(batch, batch_size: int, split: str, scale):
     # Convert to decimeters
     sequences = sequences / scale
 
+    sequences = np.nan_to_num(sequences)
     return sequences
 
 
@@ -71,6 +78,13 @@ def calc_delta(all_seqs):
     all_seqs_vel[:, :, 0] = all_seqs_vel[:, :, 1]
 
     return all_seqs_vel
+
+
+def random_noise(points, std=0.025, clipval=0.125, scale=1.0):
+    noise = np.random.normal(scale=std / scale, size=points.shape)
+    noise = np.clip(noise, -clipval / scale, clipval / scale)
+    points = points + noise
+    return points
 
 
 # ==================================================================================================
@@ -251,14 +265,29 @@ def main():
             cfg = copy.deepcopy(config_sk)
             if "mocap" in dp:
                 cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
+                cfg["item_step"] = 1
+                cfg["window_step"] = 1
 
             ds, dlen = utils_pipeline.load_dataset(dp, "train", cfg)
+            if "mocap" in dp and config_sk["item_step"] == 4:
+                # repeat frames so that skipping them later results in the correct frame rate
+                seqs = ds["sequences"]
+                for i in range(len(seqs)):
+                    nseq = []
+                    for j in range(len(seqs[i]["samples"])):
+                        for _ in range(4):
+                            nseq.append(seqs[i]["samples"][j])
+                    seqs[i]["samples"] = nseq
+                    seqs[i]["seq_length"] *= 4
+                ds["sequences"] = seqs
             dataset_train.extend(ds["sequences"])
             dlen_train += dlen
         esplit = "test" if "mocap" in dataset_eval_test else "eval"
         cfg = copy.deepcopy(config_sk)
         if "mocap" in dataset_eval_test:
             cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
+            cfg["item_step"] = 1
+            cfg["window_step"] = 1
         dataset_eval, dlen_eval = utils_pipeline.load_dataset(
             dataset_eval_test, esplit, cfg
         )
@@ -342,7 +371,12 @@ def main():
         label_gen_train = utils_pipeline.create_labels_generator(
             dataset_train, config_sk
         )
-        label_gen_eval = utils_pipeline.create_labels_generator(dataset_eval, config_sk)
+
+        cfg = copy.deepcopy(config_sk)
+        if "mocap" in dataset_eval_test:
+            cfg["item_step"] = 1
+            cfg["window_step"] = 1
+        label_gen_eval = utils_pipeline.create_labels_generator(dataset_eval, cfg)
 
         if args.apply_decay:
             if epoch % args.epoch_decay == 0 and epoch > 0:
@@ -420,6 +454,7 @@ def train(model, optimizer, epoch, data_loader, dim_used=[], backprop=True, dlen
             sequences_train, sequences_gt = utils_pipeline.apply_augmentations(
                 sequences_train, sequences_gt
             )
+            # sequences_train = random_noise(sequences_train, scale=args.scale)
 
         # Convert to millimeters
         sequences_train = sequences_train * 1000
