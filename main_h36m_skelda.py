@@ -50,13 +50,16 @@ datasets_train = [
     # "/datasets/preprocessed/amass/bmlmovi.json",
     # "/datasets/preprocessed/amass/bmlrub.json",
     # "/datasets/preprocessed/amass/kit.json",
+    # "/datasets/preprocessed/chi3d/train_forecast_rpt.json",
 ]
 
 dataset_eval_test = "/datasets/preprocessed/human36m/{}_forecast_rpt.json"
 # dataset_eval_test = "/datasets/preprocessed/cmu-mocap/{}.json"
+# dataset_eval_test = "/datasets/preprocessed/chi3d/{}_forecast_rpt.json"
 
+num_persons = 1
 num_joints = len(config_sk["select_joints"])
-in_features = num_joints * 3
+in_features = num_persons * num_joints * 3
 dim_used = list(range(in_features))
 
 # ==================================================================================================
@@ -64,6 +67,10 @@ dim_used = list(range(in_features))
 
 def prepare_sequences(batch, batch_size: int, split: str, scale):
     sequences = utils_pipeline.make_input_sequence(batch, split, datamode)
+
+    # Merge person dim into joints
+    sp = sequences.shape
+    sequences = sequences.reshape([sp[0], sp[1], -1, 3])
 
     # Convert to decimeters
     sequences = sequences / scale
@@ -263,6 +270,8 @@ def main():
         dataset_train, dlen_train = [], 0
         for dp in datasets_train:
             cfg = copy.deepcopy(config_sk)
+            if "chi3d" in dp:
+                cfg["select_joints"][cfg["select_joints"].index("nose")] = "head"
             if "mocap" in dp:
                 cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
                 cfg["item_step"] = 1
@@ -282,8 +291,12 @@ def main():
                 ds["sequences"] = seqs
             dataset_train.extend(ds["sequences"])
             dlen_train += dlen
-        esplit = "test" if "mocap" in dataset_eval_test else "eval"
+        esplit = "eval"
+        esplit = "test" if "mocap" in dataset_eval_test else esplit
+        esplit = "test" if "chi3d" in dataset_eval_test else esplit
         cfg = copy.deepcopy(config_sk)
+        if "chi3d" in dataset_eval_test:
+            cfg["select_joints"][cfg["select_joints"].index("nose")] = "head"
         if "mocap" in dataset_eval_test:
             cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
             cfg["item_step"] = 1
@@ -295,20 +308,12 @@ def main():
     cfg = copy.deepcopy(config_sk)
     if "mocap" in dataset_eval_test:
         cfg["select_joints"][cfg["select_joints"].index("nose")] = "head_upper"
+    if "chi3d" in dataset_eval_test:
+        cfg["select_joints"][cfg["select_joints"].index("nose")] = "head"
     dataset_test, dlen_test = utils_pipeline.load_dataset(
         dataset_eval_test, "test", cfg
     )
     dataset_test = dataset_test["sequences"]
-
-    # dataset_test, dlen_test = utils_pipeline.load_dataset(
-    #     datapath_preprocessed, "eval", config_sk
-    # )
-    # dataset_train, dlen_train = utils_pipeline.load_dataset(
-    #     datapath_preprocessed, "eval", config_sk
-    # )
-    # dataset_eval, dlen_eval = utils_pipeline.load_dataset(
-    #     datapath_preprocessed, "eval", config_sk
-    # )
 
     model = EqMotion(
         in_node_nf=args.past_length,
@@ -323,7 +328,7 @@ def main():
         norm_diff=args.norm_diff,
         tanh=args.tanh,
         add_agent_token=args.add_agent_token,
-        n_agent=num_joints,
+        n_agent=num_joints*num_persons,
         category_num=args.category_num,
     )
 
